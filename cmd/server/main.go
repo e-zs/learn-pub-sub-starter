@@ -30,6 +30,19 @@ func main() {
 		log.Fatalf("Error creating connection channel: %v", err)
 	}
 
+	routingKey := fmt.Sprintf("%s.*", routing.GameLogSlug)
+
+	_, _, err = pubsub.DeclareAndBind(
+		connection,
+		routing.ExchangePerilTopic,
+		routing.GameLogSlug,
+		routingKey,
+		pubsub.QueueDurable,
+	)
+	if err != nil {
+		log.Fatalf("Error declaring and binding queue: %v", err)
+	}
+
 Loop:
 	for {
 		input := gamelogic.GetInput()
