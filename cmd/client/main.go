@@ -28,20 +28,19 @@ func main() {
 		log.Fatalf("Error creating user: %v", err)
 	}
 
+	gameState := gamelogic.NewGameState(userName)
 	queueName := fmt.Sprintf("%s.%s", routing.PauseKey, userName)
-
-	_, _, err = pubsub.DeclareAndBind(
+	err = pubsub.SubscribeJSON(
 		connection,
 		routing.ExchangePerilDirect,
 		queueName,
 		routing.PauseKey,
 		pubsub.QueueTransient,
+		handlerPause(gameState),
 	)
 	if err != nil {
-		log.Fatalf("Error declaring and binding queue: %v", err)
+		log.Fatalf("error subscribing to pause: %v", err)
 	}
-
-	gameState := gamelogic.NewGameState(userName)
 
 Loop:
 	for {
