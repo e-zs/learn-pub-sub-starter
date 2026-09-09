@@ -29,17 +29,37 @@ func main() {
 	}
 
 	gameState := gamelogic.NewGameState(userName)
-	queueName := fmt.Sprintf("%s.%s", routing.PauseKey, userName)
+	pauseQueueName := fmt.Sprintf("%s.%s", routing.PauseKey, userName)
 	err = pubsub.SubscribeJSON(
 		connection,
 		routing.ExchangePerilDirect,
-		queueName,
+		pauseQueueName,
 		routing.PauseKey,
 		pubsub.QueueTransient,
 		handlerPause(gameState),
 	)
 	if err != nil {
 		log.Fatalf("error subscribing to pause: %v", err)
+	}
+
+	moveRoutingKey := fmt.Sprintf("%s.*", routing.ArmyMovesPrefix)
+	moveQueueName := fmt.Sprintf("%s.%s", routing.ArmyMovesPrefix, userName)
+	err = pubsub.SubscribeJSON(
+		connection,
+		routing.ExchangePerilTopic,
+		moveQueueName,
+		moveRoutingKey,
+		pubsub.QueueTransient,
+		handlerMove(gameState),
+	)
+	if err != nil {
+		log.Fatalf("error subscribing to army move: %v", err)
+	}
+
+	publishRoutingKey := fmt.Sprintf("%s.%s", routing.ArmyMovesPrefix, userName)
+	publishCh, err := connection.Channel()
+	if err != nil {
+		log.Fatalf("error creating channel: %v", err)
 	}
 
 Loop:
@@ -56,10 +76,22 @@ Loop:
 			}
 			continue
 		case "move":
-			_, err := gameState.CommandMove(words)
+			move, err := gameState.CommandMove(words)
 			if err != nil {
 				log.Printf("Error moving unit: %v", err)
 			}
+
+			fmt.Println("Sending move message...")
+			err = pubsub.PublishJSON(
+				publishCh,
+				routing.ExchangePerilTopic,
+				publishRoutingKey,
+				move,
+			)
+			if err != nil {
+				log.Printf("Error publishing: %v", err)
+			}
+			fmt.Println("Army moved")
 			continue
 		case "status":
 			gameState.CommandStatus()
