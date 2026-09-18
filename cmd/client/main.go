@@ -28,6 +28,12 @@ func main() {
 		log.Fatalf("Error creating user: %v", err)
 	}
 
+	publishRoutingKey := fmt.Sprintf("%s.%s", routing.ArmyMovesPrefix, userName)
+	publishCh, err := connection.Channel()
+	if err != nil {
+		log.Fatalf("error creating channel: %v", err)
+	}
+
 	gameState := gamelogic.NewGameState(userName)
 	pauseQueueName := fmt.Sprintf("%s.%s", routing.PauseKey, userName)
 	err = pubsub.SubscribeJSON(
@@ -50,17 +56,22 @@ func main() {
 		moveQueueName,
 		moveRoutingKey,
 		pubsub.QueueTransient,
-		handlerMove(gameState),
+		handlerMove(gameState, publishCh),
 	)
 	if err != nil {
 		log.Fatalf("error subscribing to army move: %v", err)
 	}
 
-	publishRoutingKey := fmt.Sprintf("%s.%s", routing.ArmyMovesPrefix, userName)
-	publishCh, err := connection.Channel()
-	if err != nil {
-		log.Fatalf("error creating channel: %v", err)
-	}
+	warQueueName := "war"
+	warRoutingKey := fmt.Sprintf("%s.*", routing.WarRecognitionsPrefix)
+	err = pubsub.SubscribeJSON(
+		connection,
+		routing.ExchangePerilTopic,
+		warQueueName,
+		warRoutingKey,
+		pubsub.QueueDurable,
+		handlerWar(gameState),
+	)
 
 Loop:
 	for {

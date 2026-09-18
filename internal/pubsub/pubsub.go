@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/bootdotdev/learn-pub-sub-starter/internal/routing"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -117,13 +118,17 @@ func DeclareAndBind(
 		return nil, amqp.Queue{}, fmt.Errorf("error creating channel: %v", err)
 	}
 
+	args := amqp.Table{
+		"x-dead-letter-exchange": routing.ExchangePerilDead,
+	}
+
 	queue, err := ch.QueueDeclare(
 		queueName,
 		queueType == QueueDurable, // true for Durable
 		queueType != QueueDurable, // autodelete false for Durable
 		queueType != QueueDurable, // exclusive false for Durable
 		false,                     // nowait
-		nil,                       // args
+		args,                      // args
 	)
 	if err != nil {
 		return nil, amqp.Queue{}, fmt.Errorf("error declaring queue: %v", err)
