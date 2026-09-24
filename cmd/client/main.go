@@ -70,7 +70,7 @@ func main() {
 		warQueueName,
 		warRoutingKey,
 		pubsub.QueueDurable,
-		handlerWar(gameState),
+		handlerWar(gameState, publishCh),
 	)
 
 Loop:

@@ -1,7 +1,9 @@
 package pubsub
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -84,13 +86,13 @@ func SubscribeJSON[T any](
 			switch ackNack {
 			case Ack:
 				err = message.Ack(false)
-				log.Printf("msg ack")
+				// log.Printf("msg ack")
 			case NackRequeue:
 				err = message.Nack(false, true)
-				log.Printf("msg nack req")
+				// log.Printf("msg nack req")
 			case NackDiscard:
 				err = message.Nack(false, false)
-				log.Printf("msg nack disc")
+				// log.Printf("msg nack disc")
 			default:
 				err = message.Nack(false, false)
 			}
@@ -141,4 +143,25 @@ func DeclareAndBind(
 
 	return ch, queue, nil
 
+}
+
+func PublishGob[T any](ch *amqp.Channel, exchange, key string, val T) error {
+	var buf bytes.Buffer
+	encoder := gob.NewEncoder(&buf)
+	err := encoder.Encode(val)
+	if err != nil {
+		return err
+	}
+
+	return ch.PublishWithContext(
+		context.Background(),
+		exchange,
+		key,
+		false,
+		false,
+		amqp.Publishing{
+			ContentType: "application/gob",
+			Body:        buf.Bytes(),
+		},
+	)
 }
