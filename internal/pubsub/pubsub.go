@@ -65,6 +65,10 @@ func SubscribeJSON[T any](
 		return err
 	}
 
+	// if err := ch.Qos(10, 0, false); err != nil {
+	// 	return fmt.Errorf("error setting Qos limit")
+	// }
+
 	messages, err := ch.Consume(q.Name, "", false, false, false, false, nil)
 	if err != nil {
 		ch.Close()
@@ -164,4 +168,73 @@ func PublishGob[T any](ch *amqp.Channel, exchange, key string, val T) error {
 			Body:        buf.Bytes(),
 		},
 	)
+}
+
+func SubscribeGob[T any](
+	conn *amqp.Connection,
+	exchange,
+	queueName,
+	key string,
+	queuType SimpleQueueType,
+	handler func(T) AckType,
+) error {
+	ch, q, err := DeclareAndBind(
+		conn,
+		exchange,
+		queueName,
+		key,
+		queuType,
+	)
+	if err != nil {
+		return err
+	}
+
+	// if err := ch.Qos(10, 0, false); err != nil {
+	// 	return fmt.Errorf("error setting Qos limit")
+	// }
+
+	messages, err := ch.Consume(q.Name, "", false, false, false, false, nil)
+	if err != nil {
+		ch.Close()
+		return fmt.Errorf("error consuming messages: %w", err)
+	}
+
+	go func() {
+		defer ch.Close()
+		for message := range messages {
+			var val T
+			decoder := gob.NewDecoder(bytes.NewReader(message.Body))
+			err := decoder.Decode(&val)
+			if err != nil {
+				log.Printf("error decoding message: %v", err)
+				if nackErr := message.Nack(false, false); nackErr != nil {
+					log.Printf("error discarding invalid delivery: %s", nackErr)
+				}
+				continue
+			}
+
+			ackNack := handler(val)
+
+			switch ackNack {
+			case Ack:
+				err = message.Ack(false)
+				// log.Printf("msg ack")
+			case NackRequeue:
+				err = message.Nack(false, true)
+				// log.Printf("msg nack req")
+			case NackDiscard:
+				err = message.Nack(false, false)
+				// log.Printf("msg nack disc")
+			default:
+				err = message.Nack(false, false)
+			}
+
+			// err = message.Ack(false)
+			if err != nil {
+				log.Printf("error acknowledging delivery: %v", err)
+			}
+		}
+	}()
+
+	return nil
 }
